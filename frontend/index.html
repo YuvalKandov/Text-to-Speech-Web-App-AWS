@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Text → Speech • Amazon Polly</title>
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica Neue,Arial;background:#0b1020;color:#eaf0ff}
+    header,main{max-width:860px;margin:auto;padding:20px}
+    h1{margin:0 0 8px}
+    textarea,select,input[type=range]{width:100%;box-sizing:border-box;border-radius:10px;border:1px solid #222;background:#101a36;color:#eaf0ff;padding:10px}
+    textarea{min-height:160px;resize:vertical}
+    label{display:block;margin-top:12px;font-weight:600}
+    .sl{display:flex;align-items:center;gap:8px}
+    .sl output{min-width:50px;text-align:right;color:#a9b3d6}
+    button{margin-top:16px;padding:10px 18px;border:0;border-radius:12px;background:linear-gradient(90deg,#6aa7ff,#a88bff);color:#06112b;font-weight:700;cursor:pointer}
+    audio{width:100%;margin-top:16px}
+    #status,#uploadStatus{color:#a9b3d6;margin-top:6px;min-height:18px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .links a{display:inline-block;margin:6px 8px 0 0;padding:6px 10px;border:1px solid #222;border-radius:10px;color:#eaf0ff;text-decoration:none;background:#101a36}
+    hr{border:0;border-top:1px solid #222;margin:24px 0}
+  </style>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+</head>
+<body>
+  <header>
+    <h1>Text → Speech with Amazon Polly</h1>
+    <p style="color:#a9b3d6">Type text or upload a document (.txt/.md). Choose a voice, adjust rate and pitch, then listen.</p>
+  </header>
+
+  <main>
+    <!-- TEXT → SPEECH -->
+    <section>
+      <label for="text">Text</label>
+      <textarea id="text" placeholder="Write something to convert..."></textarea>
+
+      <div class="row">
+        <div>
+          <label for="voice">Voice</label>
+          <select id="voice">
+            <option>Joanna</option>
+            <option>Matthew</option>
+            <option>Amy</option>
+            <option>Emma</option>
+            <option>Brian</option>
+            <option>Olivia</option>
+            <option>Kevin</option>
+            <option>Danielle</option>
+          </select>
+        </div>
+        <div>
+          <label>Rate</label>
+          <div class="sl">
+            <input id="rate" type="range" min="-20" max="20" value="0">
+            <output id="rateOut">0%</output>
+          </div>
+        </div>
+      </div>
+
+      <label>Pitch</label>
+      <div class="sl">
+        <input id="pitch" type="range" min="-3" max="3" value="0">
+        <output id="pitchOut">0 st</output>
+      </div>
+
+      <button id="speak">Convert to Speech</button>
+      <div id="status"></div>
+      <audio id="player" controls></audio>
+    </section>
+
+    <hr>
+
+    <!-- DOCUMENT UPLOAD -->
+    <section>
+      <h3>Upload a document (.txt or .md)</h3>
+      <input id="doc" type="file" accept=".txt,.md">
+      <button id="uploadBtn" style="margin-left:8px">Upload & Convert</button>
+      <div id="uploadStatus"></div>
+      <div class="links" id="resultLinks"></div>
+    </section>
+  </main>
+
+  <script>
+    // ───────────── CONFIG ─────────────
+    // POST /tts (instant text→speech)
+    const API_TTS  = "https://dh4h5shys3.execute-api.eu-central-1.amazonaws.com/tts";
+    // Base for POST /upload-url and GET /status
+    const API_BASE = "https://dh4h5shys3.execute-api.eu-central-1.amazonaws.com";
+
+    // ───────────── ELEMENTS ─────────────
+    const t=document.getElementById("text"),
+          v=document.getElementById("voice"),
+          r=document.getElementById("rate"),
+          p=document.getElementById("pitch"),
+          ro=document.getElementById("rateOut"),
+          po=document.getElementById("pitchOut"),
+          s=document.getElementById("status"),
+          pl=document.getElementById("player");
+
+    const docEl = document.getElementById("doc");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const uploadStatus = document.getElementById("uploadStatus");
+    const resultLinks = document.getElementById("resultLinks");
+
+    // ───────────── HELPERS ─────────────
+    const fmtRate  = v => v==0 ? "medium" : (v>0?`+${v}%`:`${v}%`);
+    const fmtPitch = v => v==0 ? "medium" : (v>0?`+${v}st`:`${v}st`);
+    function upd(){
+      const rv=parseInt(r.value), pv=parseInt(p.value);
+      ro.textContent = rv===0?"0%":(rv>0?`+${rv}%`:`${rv}%`);
+      po.textContent = pv===0?"0 st":(pv>0?`+${pv} st`:`${pv} st`);
+    }
+    r.oninput = p.oninput = upd; upd();
+
+    // ───────────── TEXT → SPEECH ─────────────
+    document.getElementById("speak").onclick = async () => {
+      const text = t.value.trim();
+      if (!text){ s.textContent = "Please enter text."; return; }
+      s.textContent = "Synthesizing…"; pl.removeAttribute("src");
+      try{
+        const body = { text, voiceId: v.value, rate: fmtRate(parseInt(r.value)), pitch: fmtPitch(parseInt(p.value)) };
+        const res = await fetch(API_TTS, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.message || "Request failed");
+        s.textContent = "✅ Ready (link valid ~1 hour)";
+        pl.src = data.url; pl.play().catch(()=>{});
+      }catch(e){ console.error(e); s.textContent = "⚠️ " + e.message; }
+    };
+
+    // ───────────── DOCUMENT UPLOAD (NO HEADERS PUT) ─────────────
+    uploadBtn.onclick = async () => {
+      const file = docEl.files?.[0];
+      if (!file){ uploadStatus.textContent = "Choose a .txt or .md file first."; return; }
+      resultLinks.innerHTML = ""; pl.removeAttribute("src");
+
+      try{
+        uploadStatus.textContent = "Requesting upload URL…";
+
+        // 1) Get presigned PUT URL (no contentType sent)
+        const rateStr  = fmtRate(parseInt(r.value));
+        const pitchStr = fmtPitch(parseInt(p.value));
+        const res = await fetch(`${API_BASE}/upload-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: ensureExt(file.name),
+            voiceId: v.value,
+            rate: rateStr,
+            pitch: pitchStr
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to get upload URL");
+        const { uploadUrl, key } = data;
+
+        // 2) Upload file to S3 — NO HEADERS (avoid “headers not signed”)
+        uploadStatus.textContent = "Uploading…";
+        const putRes = await fetch(uploadUrl, { method: "PUT", body: file });
+        if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
+
+        // 3) Poll /status until audio ready
+        uploadStatus.textContent = "Converting…";
+        const status = await pollStatusByKey(key);
+        if (!status.ready) { uploadStatus.textContent = "Still processing… Try again."; return; }
+
+        // 4) Display and auto-play audio
+        uploadStatus.textContent = "✅ Conversion complete.";
+        if (status.mp3?.length) {
+          pl.src = status.mp3[0].url; pl.play().catch(()=>{});
+          resultLinks.innerHTML = status.mp3.map(p =>
+            `<a href="${p.url}" target="_blank" rel="noopener">${p.key.split('/').pop()}</a>`
+          ).join("");
+        } else {
+          resultLinks.textContent = "No MP3 files found.";
+        }
+      } catch (e) {
+        console.error(e);
+        uploadStatus.textContent = "⚠️ " + e.message;
+      }
+    };
+
+    function ensureExt(name){
+      const n = name.toLowerCase();
+      return (n.endsWith(".txt") || n.endsWith(".md")) ? name : (name + ".txt");
+    }
+
+    async function pollStatusByKey(key){
+      const url = `${API_BASE}/status?key=${encodeURIComponent(key)}`;
+      for (let i=0; i<40; i++){ // ~2 minutes max
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.ready) return data;
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      return { ready:false };
+    }
+  </script>
+</body>
+</html>

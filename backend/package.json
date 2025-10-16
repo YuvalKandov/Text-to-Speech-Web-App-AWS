@@ -1,0 +1,13 @@
+{
+    "name": "aws-tts-backend",
+    "version": "1.0.0",
+    "description": "Lambda handlers for AWS Text-to-Speech App",
+    "private": true,
+    "type": "commonjs",
+    "license": "MIT",
+    "dependencies": {
+      "@aws-sdk/client-polly": "^3.645.0",
+      "@aws-sdk/client-s3": "^3.645.0",
+      "@aws-sdk/s3-request-presigner": "^3.645.0"
+    }
+}
